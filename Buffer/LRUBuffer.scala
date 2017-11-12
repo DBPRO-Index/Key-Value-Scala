@@ -1,15 +1,25 @@
 import scala.collection.mutable.Queue
+import scala.collection.mutable.ListBuffer
 import scala.collection.mutable
 
-class LRUBuffer[K,V](bufferSize:Long, writeThreshold:Long) extends Buffer[K,V]{
+class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) extends Buffer[K,V]{
   
   private val theBuffer: Queue[KeyWrapper[K]] = Queue()
   private val theMap: mutable.Map[K,V] = mutable.Map.empty
-
+  private val deleteList = new ListBuffer[K]()
+  
   private var modified = 0
   private var currentSize = 0
   private var pageFaults = 0
   private var references = 0 
+  
+  def getBufferContents():String = {
+    theBuffer.mkString("->")
+  }
+  
+  private def pushToHead(key:K):Unit = {
+    theBuffer.enqueue(theBuffer.dequeueAll(k => k.getKey() equals key)(0))
+  }
   
   private def addNonExisting(key:K, value:V):Unit = {
     val keyWrapper = new KeyWrapper(key)
@@ -34,14 +44,15 @@ class LRUBuffer[K,V](bufferSize:Long, writeThreshold:Long) extends Buffer[K,V]{
      keyWrapper.modify()
      modified+=1
      
+     if(shouldWrite) writeToDisk()
+     
      pageFaults+=1
   }
   
   private def addExisting(key:K, value:V):Unit = {
     
     // Place the referenced value on the head of the queue
-    val keyWrapper = theBuffer.dequeueAll(k => k equals key)(0)
-    theBuffer.enqueue(keyWrapper)
+    pushToHead(key)
     
     // Mark as modified if the 
     // value has changed
@@ -56,8 +67,17 @@ class LRUBuffer[K,V](bufferSize:Long, writeThreshold:Long) extends Buffer[K,V]{
     }
   }
   
+  private def shouldDelete():Boolean = {
+    deleteList.size >= deleteThreshold
+  }
+  
   private def shouldWrite():Boolean = {
     modified >= writeThreshold
+  }
+  
+  private def deleteFromDisk():Unit = {
+    deleteList.foreach(K => {}) // TODO: Actually access the disk
+    deleteList.clear()
   }
   
   private def writeToDisk():Unit = {
@@ -88,18 +108,28 @@ class LRUBuffer[K,V](bufferSize:Long, writeThreshold:Long) extends Buffer[K,V]{
           addNonExisting(key,value)
           Some(value)
         }
-        case None => None
+        case None =>{
+          pageFaults += 1
+          None
+        }
       }
     }
-    else theMap.get(key)  
+    else{ 
+      pushToHead(key)
+      theMap.get(key) 
+    }
   }
 
   override def delete(key:K):Boolean = {
-    false
+    val keyWrapper = theBuffer.dequeueAll(k => k.getKey() equals key)(0)
+    theMap.remove(keyWrapper.getKey())
+    deleteList+=keyWrapper.getKey()
+    if(shouldDelete) deleteFromDisk()
+    false //Boolean value should be based on the success of deletion
   }
   
   override def faultRate():Double = {
-    pageFaults/references
+    (pageFaults.toDouble/references)
   }
   
 }
