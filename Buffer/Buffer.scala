@@ -3,4 +3,5 @@ trait Buffer[K,V] {
   def get(key:K): Option[V]
   def delete(key:K): Boolean
   def faultRate():Double
+  def flushBuffer():Unit
 }
