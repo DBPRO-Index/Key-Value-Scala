@@ -2,7 +2,7 @@ import scala.collection.mutable.ListBuffer
 import org.junit.Test
 import org.junit.Assert._
 
-class BufferTest {
+class LRUBufferTest {
   
    @Test def faultRateTest{
      val testBuffer:Buffer[Int,String] = new LRUBuffer(3,3,3)

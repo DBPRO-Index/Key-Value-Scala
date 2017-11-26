@@ -1,48 +1,55 @@
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable
+import java.util.concurrent._
 
 class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) extends Buffer[K,V]{
   
+  private val DELETED_VALUE = "NULL"
+  
+  private val writePeriodMsec = 100
+  private val writeScheduler = new ScheduledThreadPoolExecutor(1)
+  private val writeTask = new Runnable { 
+    def run() = writeToDisk()
+  }
+  private val writeSchedulerHandle = writeScheduler.scheduleAtFixedRate(writeTask, writePeriodMsec, writePeriodMsec, TimeUnit.MILLISECONDS)
+  
   private val theBuffer: Queue[KeyWrapper[K]] = Queue()
   private val theMap: mutable.Map[K,V] = mutable.Map.empty
-  private val deleteList = new ListBuffer[K]()
+  private val writeList = new ListBuffer[KeyValPair]()
   
-  private var modified = 0
-  private var currentSize = 0
+  private object Locker
+  
   private var pageFaults = 0
   private var references = 0 
-  
-  def getBufferContents():String = {
-    theBuffer.mkString("->")
-  }
   
   private def pushToHead(key:K):Unit = {
     theBuffer.enqueue(theBuffer.dequeueAll(k => k.getKey() equals key)(0))
   }
   
-  private def addNonExisting(key:K, value:V):Unit = {
+  private def addNonExisting(key:K, value:V, fromSet:Boolean):Unit = {
     val keyWrapper = new KeyWrapper(key)
     
-    // The case when the buffer 
-    // is still not full 
-    if(currentSize < bufferSize){
-       theMap += key -> value
-       theBuffer += keyWrapper
-       currentSize += 1
+    // The buffer is not full
+    if(theBuffer.size < bufferSize){
        
-     // The buffer is full 
-     // Apply replacement policy
+     // The buffer is full - apply replacement policy
      }else{
-       theMap.remove(theBuffer.dequeue().getKey())
-       theBuffer += keyWrapper
-       theMap += key -> value
+       val oldKey:KeyWrapper[K] = theBuffer.dequeue()
+       val oldValue:Option[V] = theMap.remove(oldKey.getKey())
+       
+       if(oldKey.isModified() && !oldValue.isEmpty){
+         Locker.synchronized{
+        	 writeList += new KeyValPair(oldKey.getKey().toString(),oldValue.get.toString())
+         }
+       }
      }
     
-     // Always mark as modified, since a check should be made to
-     // see if the pair exists and if so, if the value has changed
-     keyWrapper.modify()
-     modified+=1
+     theBuffer += keyWrapper
+     theMap += key -> value
+    
+     // Mark as modified if the page fault originates from a set query
+     if(fromSet) keyWrapper.modify()
      
      if(shouldWrite) writeToDisk()
      
@@ -54,34 +61,24 @@ class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) ex
     // Place the referenced value on the head of the queue
     pushToHead(key)
     
-    // Mark as modified if the 
-    // value has changed
+    // Mark as modified and update if value has changed
     if(!(theMap(key) equals value)){
-      
       theBuffer.front.modify()
-      modified+=1
-      
-    	if(shouldWrite) writeToDisk() // TODO: Implement as asynchronous operation
-    	
     	theMap += key -> value
     }
   }
   
-  private def shouldDelete():Boolean = {
-    deleteList.size >= deleteThreshold
-  }
-  
   private def shouldWrite():Boolean = {
-    modified >= writeThreshold
-  }
-  
-  private def deleteFromDisk():Unit = {
-    deleteList.foreach(K => {}) // TODO: Actually access the disk
-    deleteList.clear()
+    writeList.size >= writeThreshold
   }
   
   private def writeToDisk():Unit = {
-    // DO STUFF
+    if(shouldWrite()){
+      Locker.synchronized{
+        // Call Phillip's function
+        writeList.clear()
+      }
+    }
   }
   
   private def readFromDisk(key:K):Option[V] = {
@@ -92,7 +89,7 @@ class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) ex
     if(theMap.contains(key))
       addExisting(key,value)
     else
-      addNonExisting(key,value)
+      addNonExisting(key,value,true)
       
     references+=1
   }
@@ -103,13 +100,13 @@ class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) ex
     // Check the disk if value not found in map 
     // and add to buffer if present on disk
     if(theMap.get(key).isEmpty){
+      pageFaults += 1
       readFromDisk(key) match{
         case Some(value) => {
-          addNonExisting(key,value)
+          addNonExisting(key,value,false)
           Some(value)
         }
         case None =>{
-          pageFaults += 1
           None
         }
       }
@@ -121,15 +118,27 @@ class LRUBuffer[K,V](bufferSize:Int, writeThreshold:Int, deleteThreshold:Int) ex
   }
 
   override def delete(key:K):Boolean = {
-    val keyWrapper = theBuffer.dequeueAll(k => k.getKey() equals key)(0)
-    theMap.remove(keyWrapper.getKey())
-    deleteList+=keyWrapper.getKey()
-    if(shouldDelete) deleteFromDisk()
-    false //Boolean value should be based on the success of deletion
+    if(!theMap.get(key).isEmpty){
+    	theBuffer.dequeueAll(k => k.getKey() equals key)(0)
+			val theValue = theMap.remove(key)
+			writeList += new KeyValPair(key.toString(), DELETED_VALUE)
+			true
+    }
+    false
+  }
+  
+  override def flushBuffer():Unit = {
+    writeToDisk()
+    theBuffer.clear()
+    theMap.clear()
   }
   
   override def faultRate():Double = {
     (pageFaults.toDouble/references)
+  }
+  
+  def getBufferContents():String = {
+    theBuffer.mkString("->")
   }
   
 }
