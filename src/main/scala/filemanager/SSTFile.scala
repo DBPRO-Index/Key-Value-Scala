@@ -3,63 +3,50 @@ package filemanager
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 
-import common._
+import configuration._
 
 import scala.collection.mutable.ArrayBuffer
 
 
 object SSTFile {
   var lastNumber = 0
+
   def newUniqueNumber(): Int = {
     lastNumber += 1
     lastNumber
   }
-
 }
 
 class SSTFile() {
   val id: Int = SSTFile.newUniqueNumber()
-  val blocks =  new ArrayBuffer[Block]()
-  val index: scala.collection.mutable.Map[String, Int] = scala.collection.mutable.Map[String, Int]()
+  val fileName: String = s"$id.sst"
+  val blocks = new ArrayBuffer[SSTBlock]
+  val index = new SSTIndex(fileName)
 
   def insert(kv: KeyValuePair): Unit = {
-    if (blocks.isEmpty || !blocks.last.insert(kv)) {
-      val newBlock = new Block(Configuration.blockSize)
-      newBlock.insert(kv)
-      index(newBlock.firstElement) = Configuration.blockSize * blocks.length
-      blocks += newBlock
-    }
+    if (blocks.isEmpty ) insertIntoNewBlock(kv)
+    else if (blocks.last.hasEnoughSpace(kv)) insertIntoBlock(kv)
+    else insertIntoNewBlock(kv)
+  }
+  private def insertIntoBlock(keyValuePair: KeyValuePair): Unit = {
+    blocks.last.put(keyValuePair)
+  }
+  private def insertIntoNewBlock(keyValuePair: KeyValuePair): Unit = {
+    index.insert(keyValuePair.key, blocks.length * Configuration.blockSize)
+    blocks += new SSTBlock
+    blocks.last.put(keyValuePair)
   }
 
   def save(): Unit = {
-    val out =new RandomAccessFile(s"data/$id-SST.txt", "rw")
-    val outChannel = out.getChannel
-    val buf = ByteBuffer.allocate(Configuration.blockSize)
+    val sstFile = new RandomAccessFile(s"${Configuration.dataPath}$fileName", "rw")
+    val channel = sstFile.getChannel
 
-    for(b <- blocks) {
-      buf.clear()
-      buf.put(b.data)
-      buf.flip()
-      while (buf.hasRemaining) {
-        outChannel.write(buf)
-      }
+    for (block <- blocks) {
+      block.write(channel)
     }
-    out.close()
+    channel.close()
+    sstFile.close()
   }
 
-  def findOffset(key: String): Int = {
-    val keys = index.keys.toList.sorted
-    var max = keys.length
-    var min = 0
 
-    if (key < keys(min)) -1
-    else {
-      while (max > (min + 1)) {
-        val mid = (min + max) / 2
-        if (keys(mid) <= key) min = mid
-        else max = mid
-      }
-      index(keys(min))
-    }
-  }
 }
