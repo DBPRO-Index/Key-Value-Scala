@@ -1,12 +1,14 @@
-package buffer
+package tests
 
 import org.junit.Test
 import org.junit.Assert._
+import buffer.Buffer
+import buffer.LRUBuffer
 
 class LRUBufferTest {
   
    @Test def faultRateTest{
-     val testBuffer:Buffer[Int,String] = new LRUBuffer(3,3,3)
+     val testBuffer:Buffer[Int,String] = new LRUBuffer(3)
      testBuffer.set(1, "a")
      testBuffer.set(2, "b")
      testBuffer.set(3, "c")
@@ -22,7 +24,7 @@ class LRUBufferTest {
    }
    
    @Test def bufferContentsTest{
-     val testBuffer = new LRUBuffer[Int,String](3,3,3)
+     val testBuffer = new LRUBuffer[Int,String](3)
      testBuffer.set(1, "a")
      testBuffer.set(2, "b")
      testBuffer.set(3, "c")
