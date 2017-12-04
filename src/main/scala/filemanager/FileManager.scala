@@ -54,7 +54,6 @@ class FileManager extends FMA {
   }
   private def getFromFile(key: String, filename: String, index: SSTIndex): Option[String] = {
     val offset = index.findOffset(key).getOrElse(return None)
-
     val block = new SSTBlock
     block.load(filename, offset)
 
@@ -71,15 +70,12 @@ class FileManager extends FMA {
                                upper: String,
                                filename: String,
                                index: SSTIndex): mutable.Map[String, String] = {
-
     val offsets = index.findOffset(lower, upper)
-
     val result = mutable.Map[String, String]()
 
     for (offset <- offsets) {
       val block = new SSTBlock
       block.load(filename, offset)
-
       val source = Source.fromBytes(block.getData, "UTF-8")
       for (line <- source.getLines()) {
         if (line.contains(":")) {
@@ -87,7 +83,6 @@ class FileManager extends FMA {
           if (kv.head >= lower && kv.head <= upper) result += (kv.head -> kv.tail.mkString(":"))
         }
       }
-
     }
     result
   }

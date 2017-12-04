@@ -1,4 +1,4 @@
-import filemanager.FileManager
+package filemanager
 
 object db extends App {
   val fileManager = new FileManager
