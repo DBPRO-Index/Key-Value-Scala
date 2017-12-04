@@ -1,48 +1,41 @@
 package buffer
 
-import scala.collection.mutable.Queue
-import scala.collection.mutable.ListBuffer
-import scala.collection.mutable
+import scala.collection.mutable.{Queue,ListBuffer,Map}
 import java.util.concurrent._
 
 class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
   
   private val DELETED_VALUE = "NULL"
   
-  private val theBuffer: Queue[KeyWrapper[K]] = Queue()
-  private val theMap: mutable.Map[K,V] = mutable.Map.empty
+  private val theBuffer: LRUQueue[K] = LRUQueue()
+  private val modifiedMap: Map[K,Boolean] = Map()
+  private val theMap: Map[K,V] = Map()
   
   private object Locker
   
   private var pageFaults = 0
   private var references = 0 
   
-  private def pushToHead(key:K):Unit = {
-    theBuffer.enqueue(theBuffer.dequeueAll(k => k.getKey() equals key)(0))
-  }
-  
   private def addNonExisting(key:K, value:V, fromSet:Boolean):Unit = {
-    val keyWrapper = new KeyWrapper(key)
-    
     // The buffer is not full
     if(theBuffer.size < bufferSize){
        
      // The buffer is full - apply replacement policy
      }else{
        
-       val oldKey:KeyWrapper[K] = theBuffer.dequeue()
-       val oldValue:Option[V] = theMap.remove(oldKey.getKey())
+       val oldKey:K = theBuffer.dequeue()
+       val oldValue:Option[V] = theMap.remove(oldKey)
        
-       if(oldKey.isModified() && !oldValue.isEmpty){
+       if(modifiedMap.contains(oldKey) && !oldValue.isEmpty){
          // TODO: WRITE
        }
      }
     
-     theBuffer += keyWrapper
+     theBuffer += key
      theMap += key -> value
     
      // Mark as modified if the page fault originates from a set query
-     if(fromSet) keyWrapper.modify()
+     if(fromSet) modifiedMap += key -> true
      
      pageFaults+=1
   }
@@ -50,11 +43,11 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
   private def addExisting(key:K, value:V):Unit = {
     
     // Place the referenced value on the head of the queue
-    pushToHead(key)
+    theBuffer.pushToHead(key)
     
     // Mark as modified and update if value has changed
     if(!(theMap(key) equals value)){
-      theBuffer.front.modify()
+      modifiedMap += theBuffer.front -> true
     	theMap += key -> value
     }
   }
@@ -68,12 +61,12 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
   }
   
   override def set(key:K, value:V): Unit = {
+    references+=1
+    
     if(theMap.contains(key))
       addExisting(key,value)
     else
       addNonExisting(key,value,true)
-      
-    references+=1
   }
   
   override def get(key:K): Option[V] = {
@@ -84,33 +77,28 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
     if(theMap.get(key).isEmpty){
       pageFaults += 1
       read(key.toString()) match{
-        case Some(value) => {
-          addNonExisting(key,value,false)
-          Some(value)
-        }
-        case None =>{
-          None
-        }
+        case Some(value) => addNonExisting(key,value,false)
+                            Some(value)
+        case None => None
       }
     }
     else{ 
-      pushToHead(key)
+      theBuffer.pushToHead(key)
       theMap.get(key) 
     }
   }
 
   override def delete(key:K):Boolean = {
     if(!theMap.get(key).isEmpty){
-    	theBuffer.dequeueAll(k => k.getKey() equals key)(0)
+    	theBuffer.dequeueFirst(k => k equals key)
 			val theValue = theMap.remove(key)
 			write(key.toString(), DELETED_VALUE)
 			true
-    }
-    false
+    }else false //TODO
   }
   
   override def flushBuffer():Unit = {
-    theBuffer.foreach(k => write(k.getKey().toString(), theMap.get(k.getKey()).get.toString()))
+    theBuffer.foreach(k => write(k.toString(), theMap.get(k).get.toString()))
     theBuffer.clear()
     theMap.clear()
   }
@@ -123,4 +111,8 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
     theBuffer.mkString("->")
   }
   
+}
+
+object LRUBuffer{
+  def apply[K,V](size:Int) = new LRUBuffer[K,V](size)
 }

@@ -11,18 +11,27 @@ import buffer.KeyValPair
 
 object DataGenerator {
 
-  var curFileID = -1
   var curFolder:String = ""
   
-  private def getCurFileID(folder:String):Int = {
-    var curID = -1
-    if(curFolder != folder || curFileID == -1){
-      do{
-        curID+=1
-      }
-      while(Files.exists(Paths.get(folder,"randomData_" + curID + ".txt")))
+  def getCurFileID(folder:String):Int = {
+    val list = new ListBuffer[Int]()
+    val dir = new File(folder)
+    for(file <- dir.listFiles()){
+      if(!file.isDirectory() && 
+         file.getName.contains("randomData_") &&
+         file.getName.endsWith(".txt")){
+           val fileName = file.getName
+           val indexOfUnderscore = fileName.indexOf("_")
+           if(indexOfUnderscore != -1){
+             try{
+               list+=(fileName.substring(fileName.indexOf("_") + 1, fileName.lastIndexOf("_")).toInt)
+             }catch {
+               case e: Exception => 
+             }
+           }
+       } 
     }
-    curID - 1
+    if(list.size > 0) list.max else -1
   }
   
   private def getNextFileID(folder:String):Int = {
@@ -39,7 +48,7 @@ object DataGenerator {
       data += new KeyValPair(key, value)
     }
     if (!Files.exists(Paths.get(folder))) Files.createDirectories(Paths.get(folder));
-    Files.write(Paths.get(folder, "randomData_" + getNextFileID(folder) + ".txt"), data.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    Files.write(Paths.get(folder, "randomData_" + getNextFileID(folder) + "_" + size + ".txt"), data.mkString("\n").getBytes(StandardCharsets.UTF_8))
     data
   }
   
@@ -55,7 +64,16 @@ object DataGenerator {
     val data = new ListBuffer[KeyValPair]()
     var lines:java.util.List[String] = List()
     try{
-      lines = Files.readAllLines(Paths.get(folder,"randomData_" + fileIndex + ".txt"), StandardCharsets.UTF_8)
+      var fileName = ""
+      val dir = new File(folder)
+      for(file <- dir.listFiles()){
+        if (!file.isDirectory() && 
+            file.getName.contains("randomData_" + fileIndex) &&
+            file.getName.endsWith(".txt"))
+          
+          fileName = file.getName
+      }
+      lines = Files.readAllLines(Paths.get(folder,fileName), StandardCharsets.UTF_8)
     }catch{
       case e:java.nio.file.NoSuchFileException => {
         data+=new KeyValPair("Error","FileNotFound")
