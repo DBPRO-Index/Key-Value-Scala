@@ -1,17 +1,21 @@
 package util
 
-import java.nio.file.{Paths, Files, Path}
-import java.io.File;
+import java.nio.file.{Paths, Files}
+import java.io.File
 import java.nio.charset.StandardCharsets
 import scala.collection.mutable.ListBuffer
-import scala.collection.immutable.List
 import scala.collection.JavaConversions._
 import scala.util.{Random}
-import buffer.KeyValPair
+import buffer.BufKeyValPair
 
 object DataGenerator {
 
   var curFolder:String = ""
+  var lastAccessedFile = ""
+  
+  def lastAccessedFileName:String = {
+    lastAccessedFile
+  }
   
   def getCurFileID(folder:String):Int = {
     val list = new ListBuffer[Int]()
@@ -24,7 +28,9 @@ object DataGenerator {
            val indexOfUnderscore = fileName.indexOf("_")
            if(indexOfUnderscore != -1){
              try{
-               list+=(fileName.substring(fileName.indexOf("_") + 1, fileName.lastIndexOf("_")).toInt)
+               var id = fileName.substring(fileName.indexOf("_"), fileName.lastIndexOf("_"))
+               id = id.substring(id.indexOf("_") + 1, id.lastIndexOf("_"))
+               list+=id.toInt
              }catch {
                case e: Exception => 
              }
@@ -38,30 +44,30 @@ object DataGenerator {
     getCurFileID(folder) + 1
   }
   
-  def generateData(folder:String,size:Int):ListBuffer[KeyValPair] = {
+  def generateData(folder:String,size:Int,bound:Int):ListBuffer[BufKeyValPair] = {
     curFolder = folder;
     
-    val data = new ListBuffer[KeyValPair]()
+    val data = new ListBuffer[BufKeyValPair]()
     for(i <- 0 to size){
-      val key = "key_" + (Random.nextInt(size*10)).toString.reverse.padTo((size *10).toString.length, "0").reverse.mkString("")
-      val value = "value_" + (Random.nextInt(size*10))
-      data += new KeyValPair(key, value)
+      val key = "key_" + (Random.nextInt(bound)).toString.reverse.padTo((bound).toString.length, "0").reverse.mkString("")
+      val value = "value_" + (Random.nextInt(bound))
+      data += new BufKeyValPair(key, value)
     }
     if (!Files.exists(Paths.get(folder))) Files.createDirectories(Paths.get(folder));
-    Files.write(Paths.get(folder, "randomData_" + getNextFileID(folder) + "_" + size + ".txt"), data.mkString("\n").getBytes(StandardCharsets.UTF_8))
+    Files.write(Paths.get(folder, "randomData_" + getNextFileID(folder) + "_" + size + "_" + bound + ".txt"), data.mkString("\n").getBytes(StandardCharsets.UTF_8))
     data
   }
   
-  def getNewest():ListBuffer[KeyValPair] = {
+  def getNewest():ListBuffer[BufKeyValPair] = {
     getData(curFolder,getCurFileID(curFolder))
   }
   
-  def getNewestFrom(folder:String):ListBuffer[KeyValPair] = {
+  def getNewestFrom(folder:String):ListBuffer[BufKeyValPair] = {
     getData(folder,getCurFileID(folder))
   }
   
-  def getData(folder:String, fileIndex:Int):ListBuffer[KeyValPair] = {
-    val data = new ListBuffer[KeyValPair]()
+  def getData(folder:String, fileIndex:Int):ListBuffer[BufKeyValPair] = {
+    val data = new ListBuffer[BufKeyValPair]()
     var lines:java.util.List[String] = List()
     try{
       var fileName = ""
@@ -74,9 +80,10 @@ object DataGenerator {
           fileName = file.getName
       }
       lines = Files.readAllLines(Paths.get(folder,fileName), StandardCharsets.UTF_8)
+      lastAccessedFile = fileName
     }catch{
       case e:java.nio.file.NoSuchFileException => {
-        data+=new KeyValPair("Error","FileNotFound")
+        data+=new BufKeyValPair("Error","FileNotFound")
         data
       }
     }
@@ -84,7 +91,7 @@ object DataGenerator {
     while(linesIterator.hasNext){
       val current = linesIterator.next();
       val index = current.indexOf(":")
-      data+=new KeyValPair(current.substring(0, index), current.substring(index+1, current.size))
+      data+=new BufKeyValPair(current.substring(0, index), current.substring(index+1, current.size))
     }
     data
   }

@@ -1,33 +1,39 @@
 package buffer
 
-import scala.collection.mutable.{Queue,ListBuffer,Map}
+import scala.collection.mutable.{Map}
 import java.util.concurrent._
 
-class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
+import filemanager.{FileManager, FMA}
+
+class LRUBuffer(bufferSize:Int) extends Buffer{
   
   private val DELETED_VALUE = "NULL"
   
-  private val theBuffer: LRUQueue[K] = LRUQueue()
-  private val modifiedMap: Map[K,Boolean] = Map()
-  private val theMap: Map[K,V] = Map()
+  private val theBuffer: LRUQueue[String] = LRUQueue()
+  private val modifiedMap: Map[String,Boolean] = Map()
+  private val theMap: Map[String,String] = Map()
+  private val fileManager: FMA = new FileManager()
   
   private object Locker
   
   private var pageFaults = 0
   private var references = 0 
   
-  private def addNonExisting(key:K, value:V, fromSet:Boolean):Unit = {
+  private def addNonExisting(key:String, value:String, fromSet:Boolean):Unit = {
+    pageFaults+=1
+     
     // The buffer is not full
     if(theBuffer.size < bufferSize){
        
      // The buffer is full - apply replacement policy
      }else{
        
-       val oldKey:K = theBuffer.dequeue()
-       val oldValue:Option[V] = theMap.remove(oldKey)
+       val oldKey = theBuffer.dequeue()
+       val oldValue:Option[String] = theMap.remove(oldKey)
        
-       if(modifiedMap.contains(oldKey) && !oldValue.isEmpty){
-         // TODO: WRITE
+       if(modifiedMap.contains(oldKey)){
+         fileManager.write(oldKey.toString, oldValue.getOrElse(DELETED_VALUE))
+         modifiedMap.remove(oldKey)
        }
      }
     
@@ -37,10 +43,9 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
      // Mark as modified if the page fault originates from a set query
      if(fromSet) modifiedMap += key -> true
      
-     pageFaults+=1
   }
   
-  private def addExisting(key:K, value:V):Unit = {
+  private def addExisting(key:String, value:String):Unit = {
     
     // Place the referenced value on the head of the queue
     theBuffer.pushToHead(key)
@@ -51,16 +56,8 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
     	theMap += key -> value
     }
   }
-
-  def write(key:String, value:String){
-    //TODO
-  }
   
-  def read(key:String):Option[V] = {
-    None:Option[V]
-  }
-  
-  override def set(key:K, value:V): Unit = {
+  override def set(key:String, value:String): Unit = {
     references+=1
     
     if(theMap.contains(key))
@@ -69,18 +66,15 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
       addNonExisting(key,value,true)
   }
   
-  override def get(key:K): Option[V] = {
+  override def get(key:String): Option[String] = {
     references+=1
     
     // Check the disk if value not found in map 
     // and add to buffer if present on disk
     if(theMap.get(key).isEmpty){
-      pageFaults += 1
-      read(key.toString()) match{
-        case Some(value) => addNonExisting(key,value,false)
-                            Some(value)
-        case None => None
-      }
+      val value = fileManager.read(key).get(key)
+      if(!value.isEmpty) addNonExisting(key,value.get,false)
+      value
     }
     else{ 
       theBuffer.pushToHead(key)
@@ -88,31 +82,45 @@ class LRUBuffer[K,V](bufferSize:Int) extends Buffer[K,V]{
     }
   }
 
-  override def delete(key:K):Boolean = {
+  override def delete(key:String):Boolean = {
+    var listIsEmpty = false
+    var valueAlreadyDeleted = false
+    var successful = false;
     if(!theMap.get(key).isEmpty){
     	theBuffer.dequeueFirst(k => k equals key)
-			val theValue = theMap.remove(key)
-			write(key.toString(), DELETED_VALUE)
-			true
-    }else false //TODO
+			theMap.remove(key)
+			successful = true
+    }else{
+      val keyFromDisk = fileManager.read(key) 
+      listIsEmpty = keyFromDisk.size == 0
+      if(!listIsEmpty) valueAlreadyDeleted = (keyFromDisk(key) equals DELETED_VALUE)
+      successful = !(listIsEmpty || valueAlreadyDeleted)
+    }
+    if(!valueAlreadyDeleted) fileManager.write(key.toString(), DELETED_VALUE)
+    successful
   }
   
   override def flushBuffer():Unit = {
-    theBuffer.foreach(k => write(k.toString(), theMap.get(k).get.toString()))
+    pageFaults = 0
+    references = 0
+    theMap.foreach(x => fileManager.write(x._1, x._2))
     theBuffer.clear()
     theMap.clear()
   }
   
-  override def faultRate():Double = {
-    (pageFaults.toDouble/references)
+  override def hitRate():Double = {
+    val fr = (pageFaults.toDouble/references)
+    if(fr.isNaN()) 0.0 else 1 - fr
   }
   
-  def getBufferContents():String = {
-    theBuffer.mkString("->")
+  override def toString():String = {
+    var test = ""
+    theBuffer.foreach(x => test+="(" + x + ":" + theMap(x) + ")->")
+    if(test equals "") "Empty" else test.substring(0, test.size-2)
   }
   
 }
 
 object LRUBuffer{
-  def apply[K,V](size:Int) = new LRUBuffer[K,V](size)
+  def apply(size:Int) = new LRUBuffer(size)
 }

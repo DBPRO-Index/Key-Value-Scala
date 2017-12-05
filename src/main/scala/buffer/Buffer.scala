@@ -1,9 +1,9 @@
 package buffer
 
-trait Buffer[K,V] {
-  def set(key:K, value:V):Unit
-  def get(key:K): Option[V]
-  def delete(key:K): Boolean
-  def faultRate():Double
+trait Buffer{
+  def set(key:String, value:String):Unit
+  def get(key:String): Option[String]
+  def delete(key:String): Boolean
+  def hitRate():Double
   def flushBuffer():Unit
 }
