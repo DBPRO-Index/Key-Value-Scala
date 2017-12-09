@@ -8,8 +8,11 @@ import scala.collection.mutable.ListBuffer
 
 object UserInterface {
   
-  val buffer:Buffer = TwoQBuffer(3000)
-//  val buffer:Buffer = LRUBuffer(3000)
+  val bufferSize = 25000
+  
+  val buffer:Buffer = TwoQBuffer(bufferSize)
+//  val buffer:Buffer = LRUBuffer(bufferSize)
+//  val buffer:Buffer = ARCBuffer(bufferSize)
   val generatedKeys:ListBuffer[String] = ListBuffer()
   
   private def printInstructions():Unit = {
@@ -48,8 +51,9 @@ object UserInterface {
   private def loadFromList(list:ListBuffer[BufKeyValPair]):Unit = {
     print("Loading...")
     val start = System.nanoTime()
-
+    var progress = 0;
     list.foreach(k => standardSet(k.toString()))
+    
     val timeElapsed = (System.nanoTime - start) / 1e9d
     print(" done in " + timeElapsed + "s\n")
   }
@@ -84,12 +88,15 @@ object UserInterface {
         val size = if(firstColonIndex == secondColonIndex) contents.substring(firstColonIndex + 1, contents.size).toInt
                    else contents.substring(firstColonIndex + 1, secondColonIndex).toInt
         val bound = if(firstColonIndex == secondColonIndex) size else contents.substring(secondColonIndex + 1, contents.size).toInt
-        DataGenerator.generateData(filePath, size, bound).foreach(x => generatedKeys += x.getKey())
-        message = "File randomData_" + DataGenerator.getCurFileID(filePath) + "_" + size + "_" + bound + ".txt created\n"
-        if(shouldLoad){ 
-          loadFromList(DataGenerator.getNewestFrom(filePath))
-          message = message.substring(0,message.size-1) + " and loaded\n"
-        }
+        if(size >= 1000000) print("Loading that will take some time. Are you sure? (y/n)\n")
+        if(size < 1000000 || (scala.io.StdIn.readLine() equals "y")) {
+          DataGenerator.generateData(filePath, size, bound).foreach(x => generatedKeys += x.getKey())
+          message = "File randomData_" + DataGenerator.getCurFileID(filePath) + "_" + size + "_" + bound + ".txt created\n"
+          if(shouldLoad){ 
+            loadFromList(DataGenerator.getNewestFrom(filePath))
+            message = message.substring(0,message.size-1) + " and loaded\n"
+          }
+        }else message = "Quitting... \n"
       }catch {
         case e: NumberFormatException => {
           message = "Wrong format for \"gen\". Type \"help\" for usage info\n"
@@ -108,7 +115,7 @@ object UserInterface {
         val folder = if(colonIndex == 0) "." else contents.substring(0, colonIndex)
         val fileIndex = contents.substring(colonIndex + 1, contents.size).toInt
         val data = DataGenerator.getData(folder, fileIndex)
-        loadFromList(data)
+        if(data.nonEmpty) loadFromList(data)
         message = if(data.size == 0) "No file with that index found\n" else "Loaded " + DataGenerator.lastAccessedFileName + "\n"
       }catch{
         case e: NumberFormatException => message = "Wrong format for \"setgen\". Type \"help\" for usage info\n"
@@ -120,6 +127,18 @@ object UserInterface {
   
   private def parseGet(contents:String):Unit = {
     print(buffer.get(contents).getOrElse("NULL") + "\n")
+  }
+  
+  private def parseRange(contents:String):Unit = {
+    var message = ""
+    val colonIndex = contents.indexOf(":")
+    if(colonIndex > 0){
+        val lower = contents.substring(0, colonIndex)
+        val upper = contents.substring(colonIndex + 1, contents.size)
+        val returnedList = buffer.range(lower, upper)
+        message = if(returnedList.isEmpty) "No values that match the criteria found.\n" else returnedList.mkString(",") + "\n"
+    }else message = "Wrong format for \"range\". Type \"help\" for usage info\n"
+    print(message)
   }
   
   private def parseDel(contents:String):Unit = {
@@ -144,6 +163,7 @@ object UserInterface {
          case "genset" => parseGen(params,true)
          case "help" => printInstructions()
          case "hrate" => printf("%.0f".format(buffer.hitRate * 100) + "%%\n");
+         case "range" => parseRange(params)
          case "set" => parseSet(params)
          case "setgen" => parseSetGen(params)
          case "test" => if(generatedKeys.size == 0) print("Empty") else print(generatedKeys.mkString(","))  

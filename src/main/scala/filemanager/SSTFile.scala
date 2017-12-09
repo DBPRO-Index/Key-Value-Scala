@@ -1,12 +1,9 @@
 package filemanager
 
 import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-
 import configuration._
-
 import scala.collection.mutable.ArrayBuffer
-
+import configuration.Configuration
 
 object SSTFile {
   var lastNumber = 0

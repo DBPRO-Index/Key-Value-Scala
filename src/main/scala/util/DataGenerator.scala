@@ -47,9 +47,11 @@ object DataGenerator {
   def generateData(folder:String,size:Int,bound:Int):ListBuffer[BufKeyValPair] = {
     curFolder = folder;
     
+    val numberLength = (bound).toString.length
     val data = new ListBuffer[BufKeyValPair]()
     for(i <- 0 to size){
-      val key = "key_" + (Random.nextInt(bound)).toString.reverse.padTo((bound).toString.length, "0").reverse.mkString("")
+      if(i % 100 == 0) print(i + "\n")
+      val key = "key_" + (Random.nextInt(bound)).toString.reverse.padTo(numberLength, "0").reverse.mkString("")
       val value = "value_" + (Random.nextInt(bound))
       data += new BufKeyValPair(key, value)
     }
@@ -79,7 +81,7 @@ object DataGenerator {
           
           fileName = file.getName
       }
-      lines = Files.readAllLines(Paths.get(folder,fileName), StandardCharsets.UTF_8)
+      if(fileName.nonEmpty) lines = Files.readAllLines(Paths.get(folder,fileName), StandardCharsets.UTF_8)
       lastAccessedFile = fileName
     }catch{
       case e:java.nio.file.NoSuchFileException => {

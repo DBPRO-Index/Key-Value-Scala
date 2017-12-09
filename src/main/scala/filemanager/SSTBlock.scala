@@ -3,10 +3,7 @@ package filemanager
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
-
 import configuration.Configuration
-
-import scala.collection.mutable
 
 class SSTBlock() {
   private val block = ByteBuffer.allocate(Configuration.blockSize)

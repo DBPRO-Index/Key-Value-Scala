@@ -5,7 +5,7 @@ import scala.collection.mutable.Queue
 class LRUQueue[E] extends Queue[E]{
   def pushToHead(element:E):Unit = {
     val value = dequeueFirst(x => x equals element)
-    if(!value.isEmpty) enqueue(value.get)
+    if(value.isDefined) enqueue(value.get)
   }
 }
 

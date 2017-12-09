@@ -7,40 +7,28 @@ import filemanager.{FileManager, FMA}
 
 class LRUBuffer(bufferSize:Int) extends Buffer{
   
-  private val DELETED_VALUE = "NULL"
-  
   private val theBuffer: LRUQueue[String] = LRUQueue()
-  private val modifiedMap: Map[String,Boolean] = Map()
-  private val theMap: Map[String,String] = Map()
-  private val fileManager: FMA = new FileManager()
-  
-  private object Locker
-  
-  private var pageFaults = 0
-  private var references = 0 
   
   private def addNonExisting(key:String, value:String, fromSet:Boolean):Unit = {
-    pageFaults+=1
+     
+    theBuffer += key
+    theMap += key -> value
      
     // The buffer is not full
-    if(theBuffer.size < bufferSize){
-       
-     // The buffer is full - apply replacement policy
-     }else{
+    if(theBuffer.size > bufferSize){
        
        val oldKey = theBuffer.dequeue()
-       val oldValue:Option[String] = theMap.remove(oldKey)
+       val oldValue = theMap.remove(oldKey)
        
        if(modifiedMap.contains(oldKey)){
-         fileManager.write(oldKey.toString, oldValue.getOrElse(DELETED_VALUE))
+         fileManager.write(oldKey, oldValue.getOrElse(DELETED_VALUE))
          modifiedMap.remove(oldKey)
        }
      }
     
-     theBuffer += key
-     theMap += key -> value
-    
-     // Mark as modified if the page fault originates from a set query
+     // Mark as modified if the page fault originates from a set query,
+     // meaning it's either new or modified key/value pair 
+     // that the db doesn't know about
      if(fromSet) modifiedMap += key -> true
      
   }
@@ -52,7 +40,7 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
     
     // Mark as modified and update if value has changed
     if(!(theMap(key) equals value)){
-      modifiedMap += theBuffer.front -> true
+      modifiedMap += key -> true
     	theMap += key -> value
     }
   }
@@ -63,6 +51,7 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
     if(theMap.contains(key))
       addExisting(key,value)
     else
+      pageFaults+=1
       addNonExisting(key,value,true)
   }
   
@@ -71,14 +60,19 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
     
     // Check the disk if value not found in map 
     // and add to buffer if present on disk
-    if(theMap.get(key).isEmpty){
-      val value = fileManager.read(key).get(key)
-      if(!value.isEmpty) addNonExisting(key,value.get,false)
-      value
-    }
-    else{ 
+    
+    if(theMap.contains(key)){
       theBuffer.pushToHead(key)
       theMap.get(key) 
+    }else{ 
+      val value = fileManager.read(key).get(key)
+      if(value.isDefined){
+        if(value.get equals DELETED_VALUE) None
+        else{
+        	addNonExisting(key,value.get,false) 
+        	value
+        }
+      }else None
     }
   }
 
@@ -86,7 +80,7 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
     var listIsEmpty = false
     var valueAlreadyDeleted = false
     var successful = false;
-    if(!theMap.get(key).isEmpty){
+    if(theMap.contains(key)){
     	theBuffer.dequeueFirst(k => k equals key)
 			theMap.remove(key)
 			successful = true
@@ -101,22 +95,14 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
   }
   
   override def flushBuffer():Unit = {
-    pageFaults = 0
-    references = 0
-    theMap.foreach(x => fileManager.write(x._1, x._2))
+    super.flushBuffer()
     theBuffer.clear()
-    theMap.clear()
-  }
-  
-  override def hitRate():Double = {
-    val fr = (pageFaults.toDouble/references)
-    if(fr.isNaN()) 0.0 else 1 - fr
   }
   
   override def toString():String = {
-    var test = ""
-    theBuffer.foreach(x => test+="(" + x + ":" + theMap(x) + ")->")
-    if(test equals "") "Empty" else test.substring(0, test.size-2)
+    var theString = ""
+    theBuffer.foreach(x => theString+="(" + x + ":" + theMap(x) + ")->")
+    if(theString.isEmpty) "Empty" else theString.substring(0, theString.size-2)
   }
   
 }

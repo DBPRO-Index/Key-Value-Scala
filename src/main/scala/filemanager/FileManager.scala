@@ -1,12 +1,14 @@
 package filemanager
 
 import configuration.Configuration
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
 class FileManager extends FMA {
+  
+  private val debug = false;
+  
   private val sst = new SSTBuffer()
   private val sstIndex = new ArrayBuffer[SSTIndex]()
 
@@ -21,7 +23,7 @@ class FileManager extends FMA {
     }
   }
   override def read(key: String): mutable.Map[String, String] = {
-    println(s"[GET] Key=$key")
+    if(debug) println(s"[GET] Key=$key")
     sst.get(key) match {
       case Some(v) => mutable.Map[String, String](key -> Some(v).get)
       case None => searchFiles(key)
@@ -29,7 +31,7 @@ class FileManager extends FMA {
   }
 
   override def read(lower: String, upper: String): mutable.Map[String, String] = {
-    println(s"[GET] Key=[$lower:$upper]")
+    if(debug) println(s"[GET] Key=[$lower:$upper]")
     val range = mutable.Map[String, String]()
 
     for (index <- sstIndex) {

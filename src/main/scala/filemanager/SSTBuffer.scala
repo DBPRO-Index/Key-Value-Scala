@@ -1,8 +1,8 @@
 package filemanager
 
-import configuration.Configuration
 import scala.collection.mutable
 
+import configuration._
 
 class SSTBuffer() {
   object Order extends Ordering[KeyValuePair] {
