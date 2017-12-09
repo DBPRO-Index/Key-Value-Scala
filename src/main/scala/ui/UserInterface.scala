@@ -4,7 +4,8 @@ import buffer._
 import util._
 import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer,Seq,Queue}
+import scala.util.{Random}
 
 object UserInterface {
   
@@ -115,7 +116,10 @@ object UserInterface {
         val folder = if(colonIndex == 0) "." else contents.substring(0, colonIndex)
         val fileIndex = contents.substring(colonIndex + 1, contents.size).toInt
         val data = DataGenerator.getData(folder, fileIndex)
-        if(data.nonEmpty) loadFromList(data)
+        if(data.nonEmpty){
+          data.foreach(x => generatedKeys += x.getKey())
+          loadFromList(data)
+        }
         message = if(data.size == 0) "No file with that index found\n" else "Loaded " + DataGenerator.lastAccessedFileName + "\n"
       }catch{
         case e: NumberFormatException => message = "Wrong format for \"setgen\". Type \"help\" for usage info\n"
@@ -129,14 +133,37 @@ object UserInterface {
     print(buffer.get(contents).getOrElse("NULL") + "\n")
   }
   
+  private def parseRandomGet(contents:String):Unit = {
+    var message = ""
+    val uniqueKeys = generatedKeys.toSet.toArray
+    if(uniqueKeys.nonEmpty){
+      try{
+        val numOfGets = contents.toInt
+        val randList:Queue[String] = Queue()
+        for(i <- 0 to numOfGets) randList += uniqueKeys(Random.nextInt(uniqueKeys.size))
+        print("Testing...")
+        val start = System.nanoTime()
+        while(randList.nonEmpty) buffer.get(randList.dequeue())
+        val timeElapsed = (System.nanoTime - start) / 1e9d
+        print(" done in " + timeElapsed + "s\n")
+      }catch{
+        case e: NumberFormatException => print("Wrong format for \"getrand\". Type \"help\" for usage info\n")
+      }
+    }else{
+      
+    	print("Error in parseRandomGet()\n")
+    }
+  }
+  
   private def parseRange(contents:String):Unit = {
     var message = ""
     val colonIndex = contents.indexOf(":")
     if(colonIndex > 0){
         val lower = contents.substring(0, colonIndex)
         val upper = contents.substring(colonIndex + 1, contents.size)
+        print("buffer.range(" + lower + "," + upper + ")\n")
         val returnedList = buffer.range(lower, upper)
-        message = if(returnedList.isEmpty) "No values that match the criteria found.\n" else returnedList.mkString(",") + "\n"
+        message = if(returnedList.isEmpty) "No values that match the criteria found.\n" else "Found " + returnedList.size + " entries.\n"
     }else message = "Wrong format for \"range\". Type \"help\" for usage info\n"
     print(message)
   }
@@ -160,6 +187,7 @@ object UserInterface {
          case "flush" => buffer.flushBuffer(); print("Buffer flushed\n")
          case "gen" => parseGen(params,false)
          case "get" => parseGet(params)
+         case "getrand" => parseRandomGet(params)
          case "genset" => parseGen(params,true)
          case "help" => printInstructions()
          case "hrate" => printf("%.0f".format(buffer.hitRate * 100) + "%%\n");

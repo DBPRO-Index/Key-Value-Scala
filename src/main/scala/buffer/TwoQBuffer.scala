@@ -48,7 +48,7 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
         if(notInQueues(oldKey)){
           val oldValue:Option[String] = theMap.get(oldKey)
           theMap.remove(oldKey)
-          if(modifiedMap(oldKey) == true){
+          if(modifiedMap.contains(oldKey)){
             fileManager.write(oldKey, oldValue.getOrElse(DELETED_VALUE))
             modifiedMap.remove(oldKey)
           }
@@ -114,7 +114,8 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
   	// Entry contained but value changed
     }else if(!(theMap(key) equals value)){
     	modifiedMap += key->true
-    }else modifiedMap += key->false
+    }else modifiedMap.remove(key)
+    
     theMap += key->value
     manageQueues(key)
   }

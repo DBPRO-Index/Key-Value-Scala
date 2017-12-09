@@ -21,6 +21,7 @@ trait Buffer{
     modifiedMap.foreach(tuple => {
       if((tuple._1 >= lower) && (tuple._1 <= upper)){
         fileManager.write(tuple._1, theMap(tuple._1))
+        modifiedMap.remove(tuple._1)
       }
     })
     fileManager.read(lower, upper).foreach(tuple => {
