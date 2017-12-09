@@ -51,8 +51,8 @@ object DataGenerator {
     val data = new ListBuffer[BufKeyValPair]()
     for(i <- 0 to size){
       if(i % 100 == 0) print(i + "\n")
-      val key = "key_" + (Random.nextInt(bound)).toString.reverse.padTo(numberLength, "0").reverse.mkString("")
-      val value = "value_" + (Random.nextInt(bound))
+      val key = "key_" + Random.nextInt(bound).toString.reverse.padTo(numberLength, "0").reverse.mkString("")
+      val value = ("value_" + Random.nextInt(bound)).reverse.padTo(120, "0").reverse.mkString("")
       data += new BufKeyValPair(key, value)
     }
     if (!Files.exists(Paths.get(folder))) Files.createDirectories(Paths.get(folder));

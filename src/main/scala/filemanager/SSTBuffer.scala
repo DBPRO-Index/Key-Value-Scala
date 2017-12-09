@@ -17,15 +17,19 @@ class SSTBuffer() {
   }
 
   def flush(): SSTIndex = {
+
+
+
     val sortedKeyValuePairs =
       for (kv <- mapOfKeyValuePairs.toList.sortBy(_._1))
       yield new KeyValuePair(kv._1, kv._2)
     mapOfKeyValuePairs.clear()
+    freeSpace = Configuration.memtableSize
 
     val out = new SSTFile()
     for (kv <- sortedKeyValuePairs) {
       out.insert(kv)
-      freeSpace += kv.size
+      //freeSpace += kv.size
     }
     out.save()
     out.index
