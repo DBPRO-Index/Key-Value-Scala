@@ -39,6 +39,8 @@ trait Buffer{
     theMap.foreach(x => if(modifiedMap.get(x._1).isDefined) fileManager.write(x._1, x._2))
     theMap.clear()
     modifiedMap.clear()
+    
+    fileManager.close()
   }
   
   def hitRate():Double = {

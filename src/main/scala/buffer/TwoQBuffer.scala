@@ -14,27 +14,29 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
   private val A1InOccurrenceMap: Map[String,Integer] = Map() 
   private val A1OutOccurrenceMap: Map[String,Integer] = Map() 
   
-  private val KIn = (bufferSize * 0.25).toInt
-  private val KOut = (bufferSize * 0.5).toInt
+  private val KIn = (bufferSize * 0.3).toInt
+  private val KOut = (KIn * 0.5).toInt
   private val Km = bufferSize - KIn - KOut
   
   private def putInFreeSlot(key:String):Boolean = {
     var spotFound = false
-    if(A1In.size <= KIn){
+    /*if(A1In.size <= KIn){
       A1In += key
       spotFound = true
     }else if(A1Out.size <= KOut){
-      A1Out += key
-      spotFound = true
-    }else if(Am.size <= Km){
+      A1Out += keys
+      spotFound = trues
+    }else */
+    if(Am.size <= Km){
       Am += key
+      AmOccurrenceMap += key -> (AmOccurrenceMap(key) + 1)
       spotFound = true
     }
     spotFound
   }
   
   private def notInQueues(key:String):Boolean = {
-    AmOccurrenceMap(key) == 0 && A1InOccurrenceMap(key) == 0 && A1OutOccurrenceMap(key) == 0 
+    AmOccurrenceMap(key) <= 0 && A1InOccurrenceMap(key) <= 0 && A1OutOccurrenceMap(key) <= 0 
   }
   
   // Dequeues the specified queue and sends the   
@@ -48,7 +50,7 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
         if(notInQueues(oldKey)){
           val oldValue:Option[String] = theMap.get(oldKey)
           theMap.remove(oldKey)
-          if(modifiedMap(oldKey) == true){
+          if(modifiedMap.contains(oldKey)){
             fileManager.write(oldKey, oldValue.getOrElse(DELETED_VALUE))
             modifiedMap.remove(oldKey)
           }
@@ -114,7 +116,8 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
   	// Entry contained but value changed
     }else if(!(theMap(key) equals value)){
     	modifiedMap += key->true
-    }else modifiedMap.remove(key)
+    }
+    
     theMap += key->value
     manageQueues(key)
   }
@@ -125,7 +128,6 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
     // No value found in buffer
     if(theMap.get(key).isEmpty){
       pageFaults+=1
-      
       val value = fileManager.read(key).get(key)
       if(value.isDefined && !(value.get equals DELETED_VALUE)){
       
@@ -181,12 +183,12 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
     A1Out.slice(0, 10).foreach(x => a1o+="(" + x + ":" + theMap(x) + ")->")
     A1In.slice(0, 10).foreach(x => a1i+="(" + x + ":" + theMap(x) + ")->")
     
-    if(!(amq equals "")) amq = "Am (" + Km + "): " + amq.substring(0,amq.size-2) + (if(Am.size > 10) "...\n" else "\n")
-    if(!(a1o equals "")) a1o = "A1Out(" + KOut + "):" + a1o.substring(0,a1o.size-2) + (if(A1Out.size > 10) "...\n" else "\n")
-    if(!(a1i equals "")) a1i = "A1In(" + KIn + "):" + a1i.substring(0,a1i.size-2) + (if(A1In.size > 10) "...\n" else "\n")
+    if(!(amq equals "")) amq = "Am (" + Am.size + "/" + Km + "): " + amq.substring(0,amq.size-2) + (if(Am.size > 10) "...\n" else "\n")
+    if(!(a1o equals "")) a1o = "A1Out(" + A1Out.size + "/" + KOut + "):" + a1o.substring(0,a1o.size-2) + (if(A1Out.size > 10) "...\n" else "\n")
+    if(!(a1i equals "")) a1i = "A1In(" + A1In.size + "/" + KIn + "):" + a1i.substring(0,a1i.size-2) + (if(A1In.size > 10) "...\n" else "\n")
     
     val combined = amq + a1o + a1i
-    if(combined equals "") "Empty" else combined.substring(0,combined.size-1)
+    if(combined equals "") "2Q(" + bufferSize + "): Empty" else "2Q(" + bufferSize + "):\n" + combined.substring(0,combined.size-1)
   }
 }
 

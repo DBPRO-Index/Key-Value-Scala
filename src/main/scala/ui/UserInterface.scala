@@ -4,15 +4,19 @@ import buffer._
 import util._
 import java.nio.file.{Paths, Files}
 import java.nio.charset.StandardCharsets
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer,Seq,Queue}
+import scala.util.{Random}
 
 object UserInterface {
   
-  val bufferSize = 25000
+  val bufferSize = 1000
   
-  val buffer:Buffer = TwoQBuffer(bufferSize)
-//  val buffer:Buffer = LRUBuffer(bufferSize)
-//  val buffer:Buffer = ARCBuffer(bufferSize)
+  val lru:Buffer = LRUBuffer(bufferSize)
+  val twoq:Buffer = TwoQBuffer(bufferSize)
+  val arc:Buffer = ARCBuffer(bufferSize)
+  
+  var currentBuffer:Buffer = lru
+  
   val generatedKeys:ListBuffer[String] = ListBuffer()
   
   private def printInstructions():Unit = {
@@ -63,7 +67,7 @@ object UserInterface {
     val value = if(contents.indexOf(":")+1 == contents.size) "" 
                 else contents.substring(contents.indexOf(":")+1, contents.size)
     if(!value.trim().isEmpty()){
-      buffer.set(key,value)
+      currentBuffer.set(key,value)
       true
     }else false
   }
@@ -115,7 +119,10 @@ object UserInterface {
         val folder = if(colonIndex == 0) "." else contents.substring(0, colonIndex)
         val fileIndex = contents.substring(colonIndex + 1, contents.size).toInt
         val data = DataGenerator.getData(folder, fileIndex)
-        if(data.nonEmpty) loadFromList(data)
+        if(data.nonEmpty){
+          data.foreach(x => generatedKeys += x.getKey())
+          loadFromList(data)
+        }
         message = if(data.size == 0) "No file with that index found\n" else "Loaded " + DataGenerator.lastAccessedFileName + "\n"
       }catch{
         case e: NumberFormatException => message = "Wrong format for \"setgen\". Type \"help\" for usage info\n"
@@ -126,7 +133,35 @@ object UserInterface {
   
   
   private def parseGet(contents:String):Unit = {
-    print(buffer.get(contents).getOrElse("NULL") + "\n")
+    print(currentBuffer.get(contents).getOrElse("NULL") + "\n")
+  }
+  
+  private def parseRandomGet(contents:String):Unit = {
+    var message = ""
+    val uniqueKeys = scala.util.Random.shuffle(generatedKeys.toSet).toArray
+    val colonIndex = contents.indexOf(":")
+    if(uniqueKeys.nonEmpty && colonIndex > 0){
+      try{
+        val numOfGets = contents.substring(0, colonIndex).toInt
+        var range = contents.substring(colonIndex + 1).toInt
+        range = if(uniqueKeys.size < range) uniqueKeys.size else range
+        val randList:Queue[String] = Queue()
+        for(i <- 1 to numOfGets) randList += uniqueKeys(Random.nextInt(range))
+        print("Testing...")
+        val start = System.nanoTime()
+        var returned = 0
+        while(randList.nonEmpty){
+          if(currentBuffer.get(randList.dequeue()).isDefined) returned +=1
+        }
+        val timeElapsed = (System.nanoTime - start) / 1e9d
+        print(" returned " + returned + " in " + timeElapsed + "s\n")
+      }catch{
+        case e: NumberFormatException => print("Wrong format for \"getrand\". Type \"help\" for usage info\n")
+      }
+    }else{
+      
+    	print("Error in parseRandomGet()\n")
+    }
   }
   
   private def parseRange(contents:String):Unit = {
@@ -135,15 +170,41 @@ object UserInterface {
     if(colonIndex > 0){
         val lower = contents.substring(0, colonIndex)
         val upper = contents.substring(colonIndex + 1, contents.size)
-        val returnedList = buffer.range(lower, upper)
-        message = if(returnedList.isEmpty) "No values that match the criteria found.\n" else returnedList.mkString(",") + "\n"
+        print("buffer.range(" + lower + "," + upper + ")\n")
+        val returnedList = currentBuffer.range(lower, upper)
+        message = if(returnedList.isEmpty) "No values that match the criteria found.\n" else "Found " + returnedList.size + " entries.\n"
     }else message = "Wrong format for \"range\". Type \"help\" for usage info\n"
     print(message)
   }
   
   private def parseDel(contents:String):Unit = {
-    if(buffer.delete(contents)) print("Success\n") 
+    if(currentBuffer.delete(contents)) print("Success\n") 
     else print("Key " + "\"" + contents + "\" not found\n")
+  }
+  
+  private def parseSwitch(contents:String):Unit = {
+    var message = ""
+    val colonIndex = contents.indexOf(":")
+    if(colonIndex > 0){
+      try{
+        var failed = false
+        val bufType = contents.substring(0, colonIndex)
+        val size = (contents.substring(colonIndex + 1)).toInt
+        bufType match{
+          case "lru" => currentBuffer.flushBuffer()
+                        currentBuffer = LRUBuffer(size) 
+          case "arc" => currentBuffer.flushBuffer()
+                        currentBuffer = ARCBuffer(size)
+          case "2q" => currentBuffer.flushBuffer()
+                       currentBuffer = TwoQBuffer(size)
+          case _ => failed = true
+        }
+        message = if(failed) "Failed. Types are: lru, 2q or arc\n" else "Success\n"
+      }catch{
+        case e:NumberFormatException => message = "Second parameter must be an integer!\n"
+      }
+    }else message = "Wrong format for \"range\". Type \"help\" for usage info\n"
+    print(message)
   }
   
   def main(args: Array[String]): Unit = {
@@ -155,32 +216,25 @@ object UserInterface {
        val action = if(spacePosition == -1) command else command.substring(0, spacePosition)
        val params = if(spacePosition == -1) "" else command.substring(spacePosition+1, command.size)
        action match{
-         case "buf" => print(buffer.toString() + "\n")
+         case "buf" => print(currentBuffer.toString() + "\n")
          case "del" | "delete" => parseDel(params)
-         case "flush" => buffer.flushBuffer(); print("Buffer flushed\n")
+         case "flush" => currentBuffer.flushBuffer(); print("Buffer flushed\n")
          case "gen" => parseGen(params,false)
-         case "get" => time(parseGet(params))
+         case "get" => parseGet(params)
+         case "getrand" => parseRandomGet(params)
          case "genset" => parseGen(params,true)
          case "help" => printInstructions()
-         case "hrate" => printf("%.0f".format(buffer.hitRate * 100) + "%%\n");
-         case "range" => time(parseRange(params))
+         case "hrate" => printf("%.0f".format(currentBuffer.hitRate * 100) + "%%\n")
+         case "range" => parseRange(params)
          case "set" => parseSet(params)
          case "setgen" => parseSetGen(params)
+         case "switch" => parseSwitch(params)
          case "test" => if(generatedKeys.size == 0) print("Empty") else print(generatedKeys.mkString(","))  
-         case "" =>
+         case "" | "quit" =>
          case _ => print("No such command. Type \"help\" for usage info\n") 
        }
      }
-     buffer.flushBuffer()
+     currentBuffer.flushBuffer()
 //   sys.addShutdownHook({ })
    }
-
-
-  def time[R](block: => R): R = {
-    val t0 = System.currentTimeMillis()
-    val result = block    // call-by-name
-    val t1 = System.currentTimeMillis()
-    println(s"Elapsed time: ${t1 - t0}ms")
-    result
-  }
 }
