@@ -15,14 +15,27 @@ import java.io.IOException
 
 import java.net.InetSocketAddress
 
+import java.util.UUID
+
+import scala.collection.mutable.Map
+
 import configuration.Configuration
+import util._
+import locking._
 
 object Server {
   
   private val DEFAULT_PORT = Configuration.defaultPort
   
+  private val resultMap: Map[UUID,String] = Map()
+  private val processor:Processor = Processor(getQueryResult)
+  
 	private var decoder:CharsetDecoder = null;
 	private var messageCharset:Charset = null;
+	
+	private def getQueryResult(keyID:UUID, result:String):Unit = {
+	  resultMap += keyID -> result
+	}
   
   def main(args:Array[String]):Unit = {
     
@@ -62,6 +75,9 @@ object Server {
 							client = key.channel().asInstanceOf[ServerSocketChannel].accept()
 							client.configureBlocking(false);
 							client.register(selector, SelectionKey.OP_READ)
+							
+							key.attach(UUID.randomUUID())
+
 						} catch{
 						  case e:IOException => println("Error accepting connection")
 						}
@@ -75,23 +91,19 @@ object Server {
 			      val charBuf = decoder.decode(buffer)
 			      println("Bytes read: " + charBuf)
 			      
-			      // TODO: Actually look up the queries
-			      // Use attach() to keep track of clients
-			      // Lock via the LockManager (does not yet exist)
-			      // and communicate with the buffer
-			      
+            processor.processQuery(Parser.convertToQuery(charBuf.toString()), key.attachment().asInstanceOf[UUID])
 			      key.interestOps(SelectionKey.OP_WRITE)
 					}
 			    if(key.isWritable()){
-			      
-			      // TODO: Send a response for the query 
-			      
-			      var commandBytes:Array[Byte] = "OK".getBytes(messageCharset);
-            val byteBuffer = ByteBuffer.allocate(2048) 
-            byteBuffer.put(commandBytes)
-            byteBuffer.flip()
-        	  key.channel().asInstanceOf[SocketChannel].write(byteBuffer)
-			      key.interestOps(SelectionKey.OP_READ)
+			      val queryResult = resultMap.remove(key.attachment().asInstanceOf[UUID]).getOrElse(null)
+			      if(queryResult != null){
+  			      val commandBytes:Array[Byte] = queryResult.getBytes(messageCharset);
+              val byteBuffer = ByteBuffer.allocate(commandBytes.length) 
+              byteBuffer.put(commandBytes)
+              byteBuffer.flip()
+          	  key.channel().asInstanceOf[SocketChannel].write(byteBuffer)
+  			      key.interestOps(SelectionKey.OP_READ)
+			      }
 			    }
 			  }
 				selectedKeysList.clear()

@@ -103,7 +103,7 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
   override def toString():String = {
     var theString = ""
     theBuffer.slice(0, 10).foreach(x => theString+="(" + x + ":" + theMap(x) + ")->")
-    if(theString.isEmpty) "LRU(" + bufferSize + "): Empty" else "LRU(" + bufferSize + "): " + theString.substring(0, theString.size-2) + (if(theBuffer.size > 10) "...\n" else "\n")
+    if(theString.isEmpty) "LRU(" + bufferSize + "): Empty" else "LRU(" + bufferSize + "): \ntheMap: " + theMap.size + "\n" + theString.substring(0, theString.size-2) + (if(theBuffer.size > 10) "...\n" else "\n")
   }
   
 }

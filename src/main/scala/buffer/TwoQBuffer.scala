@@ -30,6 +30,7 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
     if(Am.size <= Km){
       Am += key
       AmOccurrenceMap += key -> (AmOccurrenceMap(key) + 1)
+      if(Am.size > Km) removeFrom(Am, AmOccurrenceMap, false)
       spotFound = true
     }
     spotFound
@@ -93,11 +94,11 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
       Am += key
       AmOccurrenceMap += key -> (AmOccurrenceMap(key) + 1)
       if(Am.size > Km) removeFrom(Am, AmOccurrenceMap, false)
-    }else if(A1InOccurrenceMap(key) == 0){
+    }else if(A1InOccurrenceMap(key) <= 0){
       reclaimFor(key)
-      if(A1In.size > KIn) removeFrom(A1In, A1InOccurrenceMap, true)
       A1In += key
       A1InOccurrenceMap += key -> (A1InOccurrenceMap(key) + 1)
+      if(A1In.size > KIn) removeFrom(A1In, A1InOccurrenceMap, true)
     }
   }
   
@@ -187,7 +188,7 @@ class TwoQBuffer(bufferSize:Int) extends Buffer{
     if(!(a1o equals "")) a1o = "A1Out(" + A1Out.size + "/" + KOut + "):" + a1o.substring(0,a1o.size-2) + (if(A1Out.size > 10) "...\n" else "\n")
     if(!(a1i equals "")) a1i = "A1In(" + A1In.size + "/" + KIn + "):" + a1i.substring(0,a1i.size-2) + (if(A1In.size > 10) "...\n" else "\n")
     
-    val combined = amq + a1o + a1i
+    val combined = "theMap: " + theMap.size + "\n" + amq + a1o + a1i
     if(combined equals "") "2Q(" + bufferSize + "): Empty" else "2Q(" + bufferSize + "):\n" + combined.substring(0,combined.size-1)
   }
 }

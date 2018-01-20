@@ -11,11 +11,7 @@ object UserInterface {
   
   val bufferSize = 1000
   
-  val lru:Buffer = LRUBuffer(bufferSize)
-  val twoq:Buffer = TwoQBuffer(bufferSize)
-  val arc:Buffer = ARCBuffer(bufferSize)
-  
-  var currentBuffer:Buffer = lru
+  var currentBuffer:Buffer = PassThrough()
   
   val generatedKeys:ListBuffer[String] = ListBuffer()
   
@@ -185,11 +181,11 @@ object UserInterface {
   private def parseSwitch(contents:String):Unit = {
     var message = ""
     val colonIndex = contents.indexOf(":")
-    if(colonIndex > 0){
+    if(colonIndex > 0 || (contents equals "none")){
       try{
         var failed = false
-        val bufType = contents.substring(0, colonIndex)
-        val size = (contents.substring(colonIndex + 1)).toInt
+        val bufType = if(colonIndex > 0) contents.substring(0, colonIndex) else "none"
+        val size = if(colonIndex > 0) (contents.substring(colonIndex + 1)).toInt else 0
         bufType match{
           case "lru" => currentBuffer.flushBuffer()
                         currentBuffer = LRUBuffer(size) 
@@ -197,6 +193,8 @@ object UserInterface {
                         currentBuffer = ARCBuffer(size)
           case "2q" => currentBuffer.flushBuffer()
                        currentBuffer = TwoQBuffer(size)
+          case "none" => currentBuffer.flushBuffer()
+                         currentBuffer = PassThrough()
           case _ => failed = true
         }
         message = if(failed) "Failed. Types are: lru, 2q or arc\n" else "Success\n"

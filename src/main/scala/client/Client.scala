@@ -20,6 +20,8 @@ import scala.util.matching.Regex
 
 import scala.util.control.Breaks
 
+import util.Parser
+
 object Client {
   
   private val LOCALHOST = Configuration.defaultHost
@@ -35,20 +37,7 @@ object Client {
 	  while(!userInput.equals("quit")){
 	     var validCommand = false
        userInput = scala.io.StdIn.readLine()
-       val spacePosition = userInput.indexOf(" ")
-       val action = if(spacePosition == -1) userInput else userInput.substring(0, spacePosition)
-       val params = if(spacePosition == -1) "" else userInput.substring(spacePosition+1, userInput.size)
-       action match{
-         case "del" | "delete" => if(params.matches("(\\S+)((\\s)+)?")) validCommand = true
-         case "get" => if(params.matches("(\\S+)((\\s)+)?")) validCommand = true
-         case "help" =>  userInput = "help"; validCommand = true
-         case "range" => if(params.matches("(\\S+)\\s(\\S+)((\\s)+)?")) validCommand = true
-         case "set" => if(params.matches("(\\S+)\\s(\\S+)((\\s)+)?")) validCommand = true
-         case "quit" => userInput = "quit"; validCommand = true
-         case "" =>
-         case _ => print("No such command. Type \"help\" for usage info\n") 
-       }
-       if(validCommand) f(userInput.trim())
+       if(Parser.isValid(userInput)) f(userInput.trim())
      }
 	}
 	

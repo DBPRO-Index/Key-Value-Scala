@@ -232,7 +232,7 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
     L1String = "L1 (" + L1.size + "/" + L1Size + "): " + (if(!L1String.isEmpty()) L1String.substring(0,L1String.size-2) else "" )+ (if(L1.size > 10) "...\n" else "\n")
     if(!L2String.isEmpty()) L2String = "L2 (" + L2.size + "/" + L2Size + "): " + L2String.substring(0,L2String.size-2) + (if(L2.size > 10) "...\n" else "\n")
     
-    val combined = L1String + L2String
+    val combined = "theMap: " + theMap.size + "\n" + L1String + L2String
     if(combined.isEmpty()) "ARC(" + bufferSize + "):Empty" else "ARC(" + bufferSize + "):\n" + combined.substring(0,combined.size-1)
   }
   
