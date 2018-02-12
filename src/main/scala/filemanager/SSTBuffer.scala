@@ -5,9 +5,6 @@ import scala.collection.mutable
 import configuration._
 
 class SSTBuffer() {
-  object Order extends Ordering[KeyValuePair] {
-    def compare(kv1:KeyValuePair, kv2:KeyValuePair): Int = kv2.key compare kv1.key
-  }
   private val mapOfKeyValuePairs = mutable.Map[String, String]()
   private var freeSpace: Int = Configuration.memtableSize
 
@@ -17,9 +14,6 @@ class SSTBuffer() {
   }
 
   def flush(): SSTIndex = {
-
-
-
     val sortedKeyValuePairs =
       for (kv <- mapOfKeyValuePairs.toList.sortBy(_._1))
       yield new KeyValuePair(kv._1, kv._2)
@@ -34,6 +28,7 @@ class SSTBuffer() {
     out.save()
     out.index
   }
+
   def hasEnoughSpace(keyValuePair: KeyValuePair): Boolean = {
     keyValuePair.size <= freeSpace
   }

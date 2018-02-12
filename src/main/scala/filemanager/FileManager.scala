@@ -7,14 +7,14 @@ import scala.io.Source
 
 class FileManager extends FMA {
   
-  private val debug = false;
+  private val debug = false
   
   private val sst = new SSTBuffer()
   private val sstIndex = new ArrayBuffer[SSTIndex]()
 
   override def write(key: String, value: String): Unit = {
     val keyValuePair = new KeyValuePair(key, value)
-    if (keyValuePair.size > Configuration.blockSize) throw new IllegalArgumentException()
+    if (keyValuePair.size > Configuration.blockSize) throw new IllegalArgumentException("Size of Key-Value-Pair exceeds size of block")
     if (sst.hasEnoughSpace(keyValuePair)) {
       sst.insert(keyValuePair)
     } else {
@@ -38,12 +38,14 @@ class FileManager extends FMA {
       range ++= getRangeFromFile(lower, upper, index.sstFileName, index)
     }
     range ++= sst.getRange(lower, upper)
+    println(s"[INFO] ${range.size} Events found")
     range
   }
 
   override def close(): Unit = {
     sstIndex += sst.flush()
   }
+
   private def searchFiles(key: String): mutable.Map[String, String] = {
     val iterator = sstIndex.reverseIterator
     for (index <- iterator) {
@@ -87,6 +89,16 @@ class FileManager extends FMA {
       }
     }
     result
+  }
+
+  def insertFromFile( filepath: String): Unit = {
+    val source = Source.fromFile(filepath, "UTF-8")
+    val lineIterator = source.getLines
+
+    for (l <- lineIterator) {
+      val kv = l.split(":").toList
+      write(kv.head, kv.tail.mkString(":"))
+    }
   }
 }
 

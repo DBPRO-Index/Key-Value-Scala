@@ -15,7 +15,6 @@ object db extends App {
   val set = mutable.Set[String]()
 
   for (l <- lineIterator) {
-
     val kv = l.split(":").toList
     set.add(kv.head)
     fileManager.write(kv.head, kv.tail.mkString(""))

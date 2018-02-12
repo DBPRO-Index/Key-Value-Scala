@@ -44,6 +44,4 @@ class SSTFile() {
     channel.close()
     sstFile.close()
   }
-
-
 }
