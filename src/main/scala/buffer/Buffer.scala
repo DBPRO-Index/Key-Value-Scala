@@ -13,8 +13,13 @@ trait Buffer{
   protected var references = 0 
   protected var pageFaults = 0
   
-  def set(key:String, value:String):Unit
-  def get(key:String): Option[String]
+  def set(key:String, value:String):Unit = {
+    fileManager.write(key, value)
+  }
+  def get(key:String): Option[String] = {
+    fileManager.read(key).get(key)
+  }
+  
   def range(lower:String, upper:String):ListBuffer[String] = {
     val list = ListBuffer[String]()
     
@@ -39,6 +44,8 @@ trait Buffer{
     theMap.foreach(x => if(modifiedMap.get(x._1).isDefined) fileManager.write(x._1, x._2))
     theMap.clear()
     modifiedMap.clear()
+    
+    fileManager.close()
   }
   
   def hitRate():Double = {

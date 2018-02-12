@@ -65,6 +65,7 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
       theBuffer.pushToHead(key)
       theMap.get(key) 
     }else{ 
+      pageFaults+=1
       val value = fileManager.read(key).get(key)
       if(value.isDefined){
         if(value.get equals DELETED_VALUE) None
@@ -101,8 +102,8 @@ class LRUBuffer(bufferSize:Int) extends Buffer{
   
   override def toString():String = {
     var theString = ""
-    theBuffer.foreach(x => theString+="(" + x + ":" + theMap(x) + ")->")
-    if(theString.isEmpty) "Empty" else theString.substring(0, theString.size-2)
+    theBuffer.slice(0, 10).foreach(x => theString+="(" + x + ":" + theMap(x) + ")->")
+    if(theString.isEmpty) "LRU(" + bufferSize + "): Empty" else "LRU(" + bufferSize + "): \ntheMap: " + theMap.size + "\n" + theString.substring(0, theString.size-2) + (if(theBuffer.size > 10) "...\n" else "\n")
   }
   
 }

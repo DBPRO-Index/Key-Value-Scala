@@ -18,79 +18,105 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
   private val ghostL1M:Map[String,Boolean] = Map()
   private val ghostL2M:Map[String,Boolean] = Map()
   
-  private var L1Size = (bufferSize * 0.5).toInt
+  private var L1Size = (bufferSize * 0.8).toInt
   private var L2Size = bufferSize - L1Size
   
-  private var ghostL1Size = L1Size * 2
-  private var ghostL2Size = L2Size * 2
+  private var ghostL1Size = (L1Size * 1.5).toInt
+  private var ghostL2Size = (L2Size * 1.5).toInt
   
   // The difference in size between L1 and L2
   // can be at most a factor of 3 (or some other number?!)
-  def thresholdReached(forL1:Boolean):Boolean = {
+  private def thresholdReached(forL1:Boolean):Boolean = {
     if(forL1){
-      L1Size == L2Size * 3 
+      L2Size <= 1 || L1Size >= bufferSize + 1
     }else{
-      L2Size == L1Size * 3
+      L1Size <= 1 || L2Size >= bufferSize + 1
     }
   }
   
-  def addToL1(key:String):Unit = {
-    
+  private def addToL1(key:String):Unit = {
     L1_OccurrenceMap += key -> true
     L1.enqueue(key)
     
-    if(L1.size > L1Size){
-      val oldKey = L1.dequeue()
-      
-      ghostL1 += oldKey
-      ghostL1M += oldKey -> true
-      if(ghostL1.size > ghostL1Size){
-        ghostL1M.remove(ghostL1.dequeue())
-      }
-      
-      if(modifiedMap.contains(oldKey)){
-        modifiedMap.remove(oldKey)
-        fileManager.write(oldKey, theMap.remove(oldKey).getOrElse("DELETED_VALUE"))
-      }
-    }
+    if(L1.size > L1Size) dequeueL1()
   }
   
-  def addToL2(key:String):Unit = {
+  private def addToL2(key:String):Unit = {
     L1_OccurrenceMap.remove(key)
     L1.dequeueFirst(k => k equals key)
     L2.enqueue(key)
-    if(L2.size > L2Size){
-      val oldKey = L2.dequeue()
-      
-      ghostL2 += oldKey
-      ghostL2M += oldKey -> true
-      if(ghostL2.size > ghostL2Size){
-        ghostL2M.remove(ghostL2.dequeue())
+    if(L2.size > L2Size) dequeueL2()
+  }
+  
+  private def dequeueL1(){
+    val oldKey = L1.dequeue()
+    L1_OccurrenceMap.remove(oldKey)
+    
+    if(ghostL2M.contains(oldKey)){
+      ghostL2M.remove(oldKey)
+      if(ghostL2.size >= ghostL2M.size + (ghostL2Size * 0.25).toInt){
+        ghostL2.dequeueAll(k => !ghostL2M.contains(k))
       }
+    }
+    
+    ghostL1 += oldKey
+    ghostL1M += oldKey -> true
+    if(ghostL1.size > ghostL1Size){
+      ghostL1M.remove(ghostL1.dequeue())
+    }
+    
+    val oldValue:Option[String] = theMap.get(oldKey)
+    theMap.remove(oldKey)
+    if(modifiedMap.contains(oldKey)){
+      modifiedMap.remove(oldKey)
+      fileManager.write(oldKey, oldValue.getOrElse("DELETED_VALUE"))
+    }
+  }
+  
+  private def dequeueL2(){
+    val oldKey = L2.dequeue()
       
-      if(modifiedMap.contains(oldKey)){
-        modifiedMap.remove(oldKey)
-        fileManager.write(oldKey, theMap.remove(oldKey).getOrElse("DELETED_VALUE"))
+    if(ghostL1M.contains(oldKey)){
+      ghostL1M.remove(oldKey)
+      if(ghostL1.size >= ghostL1M.size + (ghostL1Size * 0.25).toInt){
+        ghostL1.dequeueAll(k => !ghostL1M.contains(k))
       }
+//      ghostL1M.remove(ghostL1.dequeueFirst(k => k equals oldKey).get)
+    }
+    
+    ghostL2 += oldKey
+    ghostL2M += oldKey -> true
+    if(ghostL2.size > ghostL2Size){
+      ghostL2M.remove(ghostL2.dequeue())
+    }
+    
+    val oldValue:Option[String] = theMap.get(oldKey)
+    theMap.remove(oldKey)
+    if(modifiedMap.contains(oldKey)){
+      modifiedMap.remove(oldKey)
+      fileManager.write(oldKey, oldValue.getOrElse("DELETED_VALUE"))
     }
   }
   
   // If the key is found in the ghost map for L1, then 
   // the total available space of L1 is increased
   // and the total space of L2 is decreased and vice versa
-  def updateSizeIfNecessary(key:String):Unit = {
-    if(ghostL1M.get(key).isDefined && !thresholdReached(true)){
-      L1Size+=1
-      L2Size-=1
-    }
-    else if(ghostL2M.get(key).isDefined && !thresholdReached(false)){
-  	  L2Size+=1
+  private def updateSizeIfNecessary(key:String):Unit = {
+    if(ghostL2M.contains(key) && !thresholdReached(false)){
+    	L2Size+=1
       L1Size-=1
+      if(L1.size > L1Size) dequeueL1()
+    }
+    else if(ghostL1M.contains(key) && !thresholdReached(true)){
+      L1Size+=1
+		  L2Size-=1
+		  if(L2.size > L2Size) dequeueL2()
     }
   }
   
   override def set(key:String, value:String):Unit = {
     references+=1
+    updateSizeIfNecessary(key)
     
     //Entry not contained in buffer
     if(theMap.get(key).isEmpty){
@@ -100,21 +126,17 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
       theMap += key -> value
       
       addToL1(key)
-      updateSizeIfNecessary(key)
       
     // Entry contained but new value
     // If second reference, then move to L2
     // If already in L2, push to head
     }else{
-      if(theMap(key) equals value){
-        modifiedMap.remove(key)
-      }else{
+      if(!(theMap(key) equals value)){
       	modifiedMap += key->true
         theMap += key -> value
       }
-      if(L1_OccurrenceMap.contains(key)) addToL2(L1.dequeueFirst(k => k equals key).get)
+      if(L1_OccurrenceMap.contains(key)) addToL2(key)
       
-      // We are sure that the key is in L1 hence ".get"
       else L2.pushToHead(key)
     }
   }
@@ -122,6 +144,7 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
   override def get(key:String): Option[String] = {
     references+=1
     
+    updateSizeIfNecessary(key)
     // No value found in buffer
     if(theMap.get(key).isEmpty){
       pageFaults+=1 
@@ -131,7 +154,6 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
         theMap += key -> value.get
         addToL1(key)
       }
-      updateSizeIfNecessary(key)
       if(value.isDefined && (value.get equals DELETED_VALUE)) None 
       value
     }else{
@@ -153,6 +175,10 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
         L1.dequeueFirst(k => k equals key)
         L1_OccurrenceMap.remove(key)
         
+        if(ghostL2M.contains(key)){
+          ghostL2M.remove(ghostL2.dequeueFirst(k => k equals key).get)
+        }
+        
         if(ghostL1M.get(key).isEmpty){
         	ghostL1 += key
     			ghostL1M += key -> true
@@ -160,17 +186,16 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
         
       }else{
         L2.dequeueFirst(k => k equals key)
+        
+        if(ghostL1M.contains(key)){
+          ghostL1M.remove(ghostL1.dequeueFirst(k => k equals key).get)
+        }
+        
         if(ghostL2M.get(key).isEmpty){
         	ghostL2 += key
     			ghostL2M += key -> true
         }
       }
-      
-      /*val resGhostL1 = ghostL1.dequeueFirst(k => k equals key) 
-      if(resGhostL1.isDefined) ghostL1M.remove(resGhostL1.get)
-      
-      val resGhostL2 = ghostL2.dequeueFirst(k => k equals key) 
-      if(resGhostL2.isDefined) ghostL2M.remove(resGhostL2.get)*/
       
       modifiedMap.remove(key)
 			theMap.remove(key)
@@ -204,11 +229,11 @@ class ARCBuffer(bufferSize:Int) extends Buffer{
     var L2String = ""
     L1.slice(0, 10).foreach(e => L1String += "(" + e + ":" + theMap(e) + ")->")
     L2.slice(0, 10).foreach(e => L2String += "(" + e + ":" + theMap(e) + ")->")
-    if(!L1String.isEmpty()) L1String = "L1 (" + L1Size + "): " + L1String.substring(0,L1String.size-2) + (if(L1.size > 10) "...\n" else "\n")
-    if(!L2String.isEmpty()) L2String = "L2 (" + L2Size + "): " + L2String.substring(0,L2String.size-2) + (if(L2.size > 10) "...\n" else "\n")
+    L1String = "L1 (" + L1.size + "/" + L1Size + "): " + (if(!L1String.isEmpty()) L1String.substring(0,L1String.size-2) else "" )+ (if(L1.size > 10) "...\n" else "\n")
+    if(!L2String.isEmpty()) L2String = "L2 (" + L2.size + "/" + L2Size + "): " + L2String.substring(0,L2String.size-2) + (if(L2.size > 10) "...\n" else "\n")
     
-    val combined = L1String + L2String
-    if(combined.isEmpty()) "Empty" else combined.substring(0,combined.size-1)
+    val combined = "theMap: " + theMap.size + "\n" + L1String + L2String
+    if(combined.isEmpty()) "ARC(" + bufferSize + "):Empty" else "ARC(" + bufferSize + "):\n" + combined.substring(0,combined.size-1)
   }
   
 }
